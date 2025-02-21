@@ -22,8 +22,22 @@ const svg2_RENAME = d3.select("#lineChart2")
 // const tooltip = ...
 
 // 2.a: LOAD...
-d3.csv("YOUR_CSV_NAME.csv").then(data => {
+d3.csv("aircraft_incidents.csv").then(data => {
     // 2.b: ... AND TRANSFORM DATA
+    // console.log("Raw data:", data);
+
+    const eventCategories = ["Fatal", "Incident", "Non-Fatal"];
+
+    const categorizedData = data.map(d => ({
+        ...d, // Create a new obj with the same properties
+        // Use the STEM categories to classify
+        categoryGroup: eventCategories.includes(d.Injury_Severity) ? d.Injury_Severity : "Other"
+    }));
+
+    console.log("Severity:", categorizedData.map(d => ({
+            category: d.Injury_Severity,       // The original category
+            categoryGroup: d.categoryGroup  // The grouped category (STEM/Non-STEM)
+        })));
 
     // 3.a: SET SCALES FOR CHART 1
 
