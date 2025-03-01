@@ -1,76 +1,101 @@
 // 1: SET GLOBAL VARIABLES
-const margin = { top: 50, right: 30, bottom: 60, left: 70 };
+const margin = { top: 50, right: 50, bottom: 60, left: 70 };
 const width = 900 - margin.left - margin.right;
 const height = 400 - margin.top - margin.bottom;
 
-// Create SVG containers for both charts
-const svg1_RENAME = d3.select("#lineChart1") // If you change this ID, you must change it in index.html too
+// Create SVG container
+const svg = d3.select("#lineChart1")
     .append("svg")
     .attr("width", width + margin.left + margin.right)
     .attr("height", height + margin.top + margin.bottom)
     .append("g")
     .attr("transform", `translate(${margin.left},${margin.top})`);
 
-const svg2_RENAME = d3.select("#lineChart2")
-    .append("svg")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom)
-    .append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
-
-// (If applicable) Tooltip element for interactivity
-// const tooltip = ...
-
-// 2.a: LOAD...
+// Load Data
 d3.csv("aircraft_incidents.csv").then(data => {
-    // 2.b: ... AND TRANSFORM DATA
-    // console.log("Raw data:", data);
-
-    const eventCategories = ["Fatal", "Incident", "Non-Fatal"];
-
-    const categorizedData = data.map(d => ({
-        ...d, // Create a new obj with the same properties
-        // Use the STEM categories to classify
-        categoryGroup: eventCategories.includes(d.Injury_Severity) ? d.Injury_Severity : "Other"
-    }));
-
-    console.log("Severity:", categorizedData.map(d => ({
-            category: d.Injury_Severity,       // The original category
-            categoryGroup: d.categoryGroup  // The grouped category (STEM/Non-STEM)
-        })));
-
-    // 3.a: SET SCALES FOR CHART 1
-
-
-    // 4.a: PLOT DATA FOR CHART 1
-
-
-    // 5.a: ADD AXES FOR CHART 1
-
-
-    // 6.a: ADD LABELS FOR CHART 1
-
-
-    // 7.a: ADD INTERACTIVITY FOR CHART 1
     
+    // Parse date and convert total fatal injuries to numbers
+    data.forEach(d => {
+        d.Event_Date = d3.timeParse("%m/%d/%y")(d.Event_Date);
+        d.Total_Fatal_Injuries = +d.Total_Fatal_Injuries || 0; // Ensure numbers
+    });
 
-    // ==========================================
-    //         CHART 2 (if applicable)
-    // ==========================================
+    // Aggregate total fatal injuries per year
+    const yearlyData = d3.rollup(data, 
+        v => d3.sum(v, d => d.Total_Fatal_Injuries), 
+        d => d3.timeFormat("%Y")(d.Event_Date)
+    );
 
-    // 3.b: SET SCALES FOR CHART 2
+    const processedData = Array.from(yearlyData, ([year, total]) => ({ 
+        year: new Date(year, 0, 1), total 
+    })).sort((a, b) => a.year - b.year);
 
+    // Set scales
+    const xScale = d3.scaleTime()
+        .domain(d3.extent(processedData, d => d.year))
+        .range([0, width]);
 
-    // 4.b: PLOT DATA FOR CHART 2
+    const yScale = d3.scaleLinear()
+        .domain([0, d3.max(processedData, d => d.total)])
+        .nice()
+        .range([height, 0]);
 
+    // Define line generator
+    const line = d3.line()
+        .x(d => xScale(d.year))
+        .y(d => yScale(d.total))
+        .curve(d3.curveMonotoneX); // Smooth line
 
-    // 5.b: ADD AXES FOR CHART 
+    // Add line to SVG
+    svg.append("path")
+        .datum(processedData)
+        .attr("fill", "none")
+        .attr("stroke", "steelblue")
+        .attr("stroke-width", 2)
+        .attr("d", line);
 
+    // Add trendline 
+    // const xValues = processedData.map(d => d.year.getFullYear());
+    // const yValues = processedData.map(d => d.total);
+    // const regression = ss.linearRegression(ss.linearRegressionLine(ss.linearRegression(xValues.map((x, i) => [x, yValues[i]]))));
 
-    // 6.b: ADD LABELS FOR CHART 2
+    // const trendlineData = [
+    //     { year: processedData[0].year, total: regression(processedData[0].year.getFullYear()) },
+    //     { year: processedData[processedData.length - 1].year, total: regression(processedData[processedData.length - 1].year.getFullYear()) }
+    // ];
 
+    // svg.append("path")
+    //     .datum(trendlineData)
+    //     .attr("fill", "none")
+    //     .attr("stroke", "gray")
+    //     .attr("stroke-dasharray", "5,5")
+    //     .attr("stroke-width", 2)
+    //     .attr("d", line);
 
-    // 7.b: ADD INTERACTIVITY FOR CHART 2
+    // Add Axes
+    const xAxis = d3.axisBottom(xScale).ticks(10).tickFormat(d3.timeFormat("%Y"));
+    const yAxis = d3.axisLeft(yScale);
 
+    svg.append("g")
+        .attr("transform", `translate(0,${height})`)
+        .call(xAxis);
+
+    svg.append("g")
+        .call(yAxis);
+
+    // Labels
+
+    svg.append("text")
+        .attr("x", width / 2)
+        .attr("y", height + 40)
+        .attr("text-anchor", "middle")
+        .text("Year");
+
+    svg.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("x", -height / 2)
+        .attr("y", -50)
+        .attr("text-anchor", "middle")
+        .text("Total Fatal Injuries");
 
 });
