@@ -11,80 +11,41 @@ const svg = d3.select("#lineChart1")
     .append("g")
     .attr("transform", `translate(${margin.left},${margin.top})`);
 
-// Load Data
 d3.csv("aircraft_incidents.csv").then(data => {
-    
     // Parse date and convert total fatal injuries to numbers
     data.forEach(d => {
         d.Event_Date = d3.timeParse("%m/%d/%y")(d.Event_Date);
         d.Total_Fatal_Injuries = +d.Total_Fatal_Injuries || 0; // Ensure numbers
     });
 
-    // Aggregate total fatal injuries per year
-    const yearlyData = d3.rollup(data, 
-        v => d3.sum(v, d => d.Total_Fatal_Injuries), 
-        d => d3.timeFormat("%Y")(d.Event_Date)
-    );
+    // Extract unique aircraft manufacturers (Make) for dropdown
+    const aircraftMakes = [...new Set(data.map(d => d.Make))].filter(d => d);
 
-    const processedData = Array.from(yearlyData, ([year, total]) => ({ 
-        year: new Date(year, 0, 1), total 
-    })).sort((a, b) => a.year - b.year);
+    // Create dropdown options
+    const dropdown = d3.select("#accidentFilter")
+        .append("select")
+        .on("change", () => updateChart(dropdown.node().value));
+    
+    dropdown.append("option").text("All").attr("value", "all");
+    aircraftMakes.forEach(make => {
+        dropdown.append("option").text(make).attr("value", make);
+    });
 
-    // Set scales
-    const xScale = d3.scaleTime()
-        .domain(d3.extent(processedData, d => d.year))
-        .range([0, width]);
-
-    const yScale = d3.scaleLinear()
-        .domain([0, d3.max(processedData, d => d.total)])
-        .nice()
-        .range([height, 0]);
+    // Define scales
+    const xScale = d3.scaleTime().range([0, width]);
+    const yScale = d3.scaleLinear().nice().range([height, 0]);
 
     // Define line generator
     const line = d3.line()
         .x(d => xScale(d.year))
         .y(d => yScale(d.total))
-        .curve(d3.curveMonotoneX); // Smooth line
+        .curve(d3.curveMonotoneX);
 
-    // Add line to SVG
-    svg.append("path")
-        .datum(processedData)
-        .attr("fill", "none")
-        .attr("stroke", "steelblue")
-        .attr("stroke-width", 2)
-        .attr("d", line);
+    // Append axes groups with class names
+    svg.append("g").attr("class", "x-axis").attr("transform", `translate(0,${height})`);
+    svg.append("g").attr("class", "y-axis");
 
-    // Add trendline 
-    // const xValues = processedData.map(d => d.year.getFullYear());
-    // const yValues = processedData.map(d => d.total);
-    // const regression = ss.linearRegression(ss.linearRegressionLine(ss.linearRegression(xValues.map((x, i) => [x, yValues[i]]))));
-
-    // const trendlineData = [
-    //     { year: processedData[0].year, total: regression(processedData[0].year.getFullYear()) },
-    //     { year: processedData[processedData.length - 1].year, total: regression(processedData[processedData.length - 1].year.getFullYear()) }
-    // ];
-
-    // svg.append("path")
-    //     .datum(trendlineData)
-    //     .attr("fill", "none")
-    //     .attr("stroke", "gray")
-    //     .attr("stroke-dasharray", "5,5")
-    //     .attr("stroke-width", 2)
-    //     .attr("d", line);
-
-    // Add Axes
-    const xAxis = d3.axisBottom(xScale).ticks(10).tickFormat(d3.timeFormat("%Y"));
-    const yAxis = d3.axisLeft(yScale);
-
-    svg.append("g")
-        .attr("transform", `translate(0,${height})`)
-        .call(xAxis);
-
-    svg.append("g")
-        .call(yAxis);
-
-    // Labels
-
+    // Append axis labels
     svg.append("text")
         .attr("x", width / 2)
         .attr("y", height + 40)
@@ -98,4 +59,45 @@ d3.csv("aircraft_incidents.csv").then(data => {
         .attr("text-anchor", "middle")
         .text("Total Fatal Injuries");
 
+    function updateChart(selectedMake) {
+        let filteredData = data;
+
+        if (selectedMake !== "all") {
+            filteredData = data.filter(d => d.Make === selectedMake);
+        }
+
+        // Aggregate data by year
+        const yearlyData = d3.rollup(filteredData, 
+            v => d3.sum(v, d => +d.Total_Fatal_Injuries || 0), 
+            d => d3.timeFormat("%Y")(d.Event_Date)
+        );
+
+        const processedData = Array.from(yearlyData, ([year, total]) => ({ 
+            year: new Date(year, 0, 1), total 
+        })).sort((a, b) => a.year - b.year);
+
+        // Update scales
+        xScale.domain(d3.extent(processedData, d => d.year));
+        yScale.domain([0, d3.max(processedData, d => d.total)]).nice();
+
+        // Bind data and update line
+        const linePath = svg.selectAll(".line-path").data([processedData]);
+
+        linePath.enter()
+            .append("path")
+            .attr("class", "line-path")
+            .merge(linePath)
+            .transition()
+            .duration(750)
+            .attr("fill", "none")
+            .attr("stroke", "steelblue")
+            .attr("stroke-width", 2)
+            .attr("d", line);
+
+        // Update axes
+        svg.select(".x-axis").transition().duration(750).call(d3.axisBottom(xScale).ticks(10).tickFormat(d3.timeFormat("%Y")));
+        svg.select(".y-axis").transition().duration(750).call(d3.axisLeft(yScale));
+    }
+
+    updateChart("all"); // Initial render with all data
 });
